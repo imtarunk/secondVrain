@@ -1,8 +1,7 @@
 import express, { Request, Response } from "express";
-import { UserModel } from "./db";
+import { User } from "./db";
 import bcrypt from "bcrypt";
-import mongoose from "mongoose";
-import z, { promise, string } from "zod";
+import { z } from "zod";
 import jwt from "jsonwebtoken";
 
 const app = express();
@@ -11,168 +10,101 @@ app.use(express.json());
 
 const JWT_SECRET = "your_secret_key"; // Use a secure key in production
 
+// Signup schema
 const signupSchema = z.object({
   username: z
     .string()
     .min(3, "Username must be at least 3 characters long")
-    .email("Entre a valid email id"),
+    .email("Enter a valid email id"),
   password: z
     .string()
     .min(6, "Password must be at least 6 characters long")
-    .regex(/[A-Z]/, "Password must contain at least one uppercase letter") // Password must have at least one uppercase letter
-    .regex(/[0-9]/, "Password must contain at least one number"), // Password must have at least one number,
+    .regex(/[A-Z]/, "Password must contain at least one uppercase letter")
+    .regex(/[0-9]/, "Password must contain at least one number"),
 });
 
-app.post("/api/v1/signup", async (req, res) => {
+// Login schema
+const loginSchema = z.object({
+  username: z.string().min(1, "Username is required"),
+  password: z.string().min(1, "Password is required"),
+});
+
+// Signup route
+app.post("/api/v1/signup", async (req,res) => {
   try {
     const parsedBody = signupSchema.parse(req.body);
     const { username, password } = parsedBody;
 
-    if (!username || !password) {
-      res.status(400).json({
-        message: "Entre a valid input",
-      });
-    }
-
-    const userCheck = await UserModel.findOne({ username });
-
+    const userCheck = await User.findOne({ username });
     if (userCheck) {
-      res.status(209).json({
-        message: "user allready exist",
-        success: true,
-        userCheck,
+       res.status(409).json({
+        message: "User  already exists",
+        success: false,
       });
     }
 
-    const hash = bcrypt.hashSync(password, 5);
-
-    await UserModel.create({
+    const hash = await bcrypt.hash(password, 10); // Use async hash
+    await User.create({
       username,
       password: hash,
     });
 
-    res
-      .status(201)
-      .json({ message: "User registered successfully", success: true });
+     res.status(201).json({ message: "User  registered successfully", success: true });
   } catch (error) {
     if (error instanceof z.ZodError) {
-      res.status(400).json({
+       res.status(400).json({
         message: error.errors.map((e) => e.message).join(", "),
         success: false,
       });
     }
 
-    console.log(error);
-    res.status(500).json({
+    console.error(error);
+     res.status(500).json({
       message: "Internal server error",
       success: false,
     });
   }
 });
 
-// app.post("/api/v1/login", async (req, res) => {
-//   try {
-//     const { username, password } = req.body;
-
-//     if (!username || !password) {
-//       return res.status(400).json({
-//         message: "Entre a valid input",
-//       });
-//     }
-
-//     try {
-//       const user = await UserModel.findOne({ username });
-
-//       if (!user) {
-//         return res.status(411).json({
-//           message: "user not found",
-//           success: true,
-//         });
-//       }
-//       const passwordCheck = bcrypt.compareSync(password, user?.password);
-
-//       if (!passwordCheck) {
-//         return res.status(401).json({
-//           message: "Invalid password",
-//           success: false,
-//         });
-//       }
-
-//       const token = jwt.sign({ db_id: user._id }, JWT_SECRET, {
-//         expiresIn: "24h",
-//       });
-
-//       return res.status(200).json({
-//         message: "user login successfully ",
-//         success: true,
-//         token: token,
-//         loggedUser: user,
-//       });
-//     } catch (error) {
-//       console.log(error);
-//       res.status(500).json({
-//         message: "Internal server error",
-//         success: false,
-//       });
-//     }
-//   } catch (error) {
-//     console.log(error);
-//   }
-// });
-
-app.post("/api/v1/login", async (req, res) => {
+// Login route
+app.post("/api/v1/login", async (req,res) => {
   try {
-    const { username, password } = req.body;
+    const parsedBody = loginSchema.parse(req.body);
+    const { username, password } = parsedBody;
 
-    if (!username || !password) {
-      res.status(400).json({
-        message: "Entre a valid input",
-      });
-    }
+    const user = await User.findOne({ username });
 
-    try {
-      const user = await UserModel.findOne({ username });
-
-      if (!user) {
-        res.status(411).json({
-          message: "user not found",
-          success: true,
-        });
-      }
-      const passwordCheck = bcrypt.compareSync(user?.password, password);
-
-      if (!passwordCheck) {
-        res.status(401).json({
-          message: "Invalid password",
-          success: false,
-        });
-      }
-
-      const token = jwt.sign({ db_id: user?._id }, JWT_SECRET, {
-        expiresIn: "24h",
-      });
-
-      return res.status(200).json({
-        message: "user login successfully ",
-        success: true,
-        token: token,
-        loggedUser: user,
-      });
-    } catch (error) {
-      console.log(error);
-      return res.status(500).json({
-        message: "Internal server error",
+    if (user) {
+      const passwordCheck = await bcrypt.compare(password, user.password);
+    if (!passwordCheck) {
+       res.status(401).json({
+        message: "Invalid password",
         success: false,
       });
     }
+
+    const token = jwt.sign({ db_id:user._id }, JWT_SECRET, {
+      expiresIn: "24h",
+    });
+
+     res.status(200).json({
+      message: "User  logged in successfully",
+      success: true,
+      token: token,
+      loggedUser:  user,
+    });
+    }
+
+    
   } catch (error) {
-    console.log(error);
-    return res.status(500).json({
+    console.error(error);
+     res.status(500).json({
       message: "Internal server error",
       success: false,
     });
   }
 });
-app.listen(3000, () => {
-  console.log(`Server is running on ${port}`);
+
+app.listen(port, () => {
+  console.log(`Server is running on port ${port}`);
 });
