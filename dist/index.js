@@ -12,15 +12,15 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
+const config_1 = require("./config");
 const express_1 = __importDefault(require("express"));
 const db_1 = require("./db");
 const bcrypt_1 = __importDefault(require("bcrypt"));
 const zod_1 = require("zod");
 const jsonwebtoken_1 = __importDefault(require("jsonwebtoken"));
+const middleware_1 = require("./middleware");
 const app = (0, express_1.default)();
-const port = 3000;
 app.use(express_1.default.json());
-const JWT_SECRET = "your_secret_key"; // Use a secure key in production
 // Signup schema
 const signupSchema = zod_1.z.object({
     username: zod_1.z
@@ -55,7 +55,9 @@ app.post("/api/v1/signup", (req, res) => __awaiter(void 0, void 0, void 0, funct
             username,
             password: hash,
         });
-        res.status(201).json({ message: "User  registered successfully", success: true });
+        res
+            .status(201)
+            .json({ message: "User  registered successfully", success: true });
     }
     catch (error) {
         if (error instanceof zod_1.z.ZodError) {
@@ -85,7 +87,7 @@ app.post("/api/v1/login", (req, res) => __awaiter(void 0, void 0, void 0, functi
                     success: false,
                 });
             }
-            const token = jsonwebtoken_1.default.sign({ db_id: user._id }, JWT_SECRET, {
+            const token = jsonwebtoken_1.default.sign({ db_id: user._id }, config_1.JWT_SECRET, {
                 expiresIn: "24h",
             });
             res.status(200).json({
@@ -104,6 +106,81 @@ app.post("/api/v1/login", (req, res) => __awaiter(void 0, void 0, void 0, functi
         });
     }
 }));
-app.listen(port, () => {
+app.post("/api/v1/content/add", middleware_1.userMiddleware, (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    const title = req.body.title;
+    const link = req.body.link;
+    db_1.Content.create({
+        title,
+        link,
+        userId: req.userId,
+        tag: [],
+    });
+    res.status(200).json({
+        message: "Data saved",
+        success: true,
+    });
+}));
+app.get("/api/v1/content/", middleware_1.userMiddleware, (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    try {
+        // Fetch the user data based on the userId
+        const userData = yield db_1.Content.find({ userId: req.userId });
+        // Log the data (optional for debugging purposes)
+        console.log(userData);
+        // Send the response with the fetched data
+        res.status(200).json({
+            message: "User data downloaded",
+            success: true,
+            data: userData, // Sending the user data in the response
+        });
+    }
+    catch (error) {
+        console.error("Error fetching user data:", error);
+        // Handle any errors during the database query
+        res.status(500).json({
+            message: "Failed to fetch user data",
+            success: false,
+            error,
+        });
+    }
+}));
+app.delete("/api/v1/content/delete/:contentId", middleware_1.userMiddleware, (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    try {
+        const loggedUser = req.userId; // User ID from the middleware
+        const contentId = req.params.contentId; // Extract contentId from URL parameter
+        // Find the content by ID
+        const content = yield db_1.Content.findById(contentId);
+        // Check if the content exists
+        if (!content) {
+            res.status(404).json({
+                message: "Content not found",
+                success: false,
+            });
+        }
+        // Optionally, you can check if the logged user is the owner of the content
+        if ((content === null || content === void 0 ? void 0 : content.userId) !== loggedUser) {
+            res.status(403).json({
+                message: "You do not have permission to delete this content",
+                success: false,
+            });
+        }
+        // Delete the content
+        yield db_1.Content.findByIdAndDelete(contentId);
+        // Send success response
+        res.status(200).json({
+            message: "Content deleted successfully",
+            success: true,
+        });
+    }
+    catch (err) {
+        console.error(err);
+        res.status(500).json({
+            message: "Error deleting content",
+            success: false,
+            err,
+        });
+    }
+}));
+const port = config_1.PORT || 3000;
+app.listen(config_1.PORT, () => {
     console.log(`Server is running on port ${port}`);
 });

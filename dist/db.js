@@ -33,10 +33,11 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.User = void 0;
+exports.Tag = exports.Content = exports.User = void 0;
 const mongoose_1 = __importStar(require("mongoose"));
+const config_1 = require("./config");
 mongoose_1.default
-    .connect("mongodb+srv://tarunshr145:mLLcZqxH5Ch1tWZx@cluster0.dt9ca.mongodb.net/")
+    .connect(config_1.mongoo_uri)
     .then(() => {
     console.log("db connected");
 })
@@ -53,4 +54,19 @@ const UserSchema = new mongoose_1.Schema({
         minlength: 6,
     },
 });
+const contentTypes = ["image", "video", "article", "audio"];
+// content schema model
+const ContentSchema = new mongoose_1.Schema({
+    title: { type: String, require: true },
+    link: { type: String, require: true, unique: true },
+    type: { type: String, enum: contentTypes, require: true },
+    tag: [{ type: mongoose_1.Types.ObjectId, ref: "tag" }],
+    userId: { type: mongoose_1.Types.ObjectId, ref: "User", require: true },
+});
+//tag schema model
+const tagSchema = new mongoose_1.default.Schema({
+    title: { type: String, required: true, unique: true },
+});
 exports.User = mongoose_1.default.model("User", UserSchema);
+exports.Content = mongoose_1.default.model("Content", ContentSchema);
+exports.Tag = mongoose_1.default.model("Tag", tagSchema);
